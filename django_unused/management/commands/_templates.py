@@ -86,18 +86,16 @@ def filter_templates(
             f"{Fore.YELLOW}{filtered_dir_template_count} templates excluded by directory filter.\n"
         )
 
-    print(
-        f"{Fore.GREEN}{len([t for t in templates if t.app_config])} app templates found after filtering.\n"
-    )
+    print(f"{Fore.GREEN}{len(templates)} app templates found after filtering.\n")
     return templates
 
 
 def determine_reference_type(line: str) -> str:
-    if "include" in line:
+    line = line.strip()
+    if "{% include" in line and "%}" in line:
         return "include"
-    elif "extend" in line:
+    elif "{% extends" in line and "%}" in line:
         return "extend"
-    # Add more conditions as needed for other reference types
     else:
         return "unknown"
 
@@ -128,7 +126,9 @@ def search_unused_templates(templates: List[TemplateInfo]) -> TemplateSearchResu
                     (t for t in templates if t.file_path == current_file), None
                 )
                 if referencing_template:
-                    reference_type = determine_reference_type(line)
+                    reference_type = determine_reference_type(
+                        referencing_template, line
+                    )
                     reference = Reference(
                         template_info=referencing_template,
                         line_number=line_number,

@@ -29,10 +29,10 @@ def get_view_files():
                 # print('    ', 'ROOT:', root)
                 # print('    ', 'DIRS:', dirs)
                 # print('    ', 'FILES:', filenames)
-                if os.path.basename(root) == 'views':
+                if os.path.basename(root) == "views":
                     for sub_root, sub_dirs, sub_filenames in os.walk(root):
                         for filename in sub_filenames:
-                            if filename.endswith('.py'):
+                            if filename.endswith(".py"):
                                 # view_files.append(filename)
                                 # print('    --', filename)
                                 # print('      ', os.path.splitext(filename))
@@ -42,14 +42,24 @@ def get_view_files():
                                 # print('      ', os.path.relpath(sub_root, start=settings.BASE_DIR))
                                 # print('      ', sub_root.replace(settings.BASE_DIR, ''))
                                 # print('      ')
-                                view_file_paths.append(os.path.join(os.path.relpath(sub_root, start=settings.BASE_DIR),
-                                                                    os.path.splitext(filename)[0]).replace('\\', '/'))
+                                view_file_paths.append(
+                                    os.path.join(
+                                        os.path.relpath(
+                                            sub_root, start=settings.BASE_DIR
+                                        ),
+                                        os.path.splitext(filename)[0],
+                                    ).replace("\\", "/")
+                                )
                 # Files named 'views.py
                 for filename in filenames:
-                    if filename == 'views.py':
+                    if filename == "views.py":
                         # view_files.append(filename)
-                        view_file_paths.append(os.path.join(os.path.relpath(root, start=settings.BASE_DIR),
-                                                            os.path.splitext(filename)[0]).replace('\\', '/'))
+                        view_file_paths.append(
+                            os.path.join(
+                                os.path.relpath(root, start=settings.BASE_DIR),
+                                os.path.splitext(filename)[0],
+                            ).replace("\\", "/")
+                        )
 
     return view_file_paths
 
@@ -63,11 +73,15 @@ def get_views(view_file_paths):
     views = []
     for path in view_file_paths:
         # import the module at the path
-        dot_path = path.replace('/', '.')
+        dot_path = path.replace("/", ".")
         mod = importlib.import_module(dot_path)
         # Get each class from the module
         # Adapted from https://stackoverflow.com/a/5520589
-        classes = [c for c in inspect.getmembers(mod, inspect.isclass) if c[1].__module__ == mod.__name__]
+        classes = [
+            c
+            for c in inspect.getmembers(mod, inspect.isclass)
+            if c[1].__module__ == mod.__name__
+        ]
         if classes:
             # Add each view class to the list
             for c in classes:
@@ -85,10 +99,30 @@ def get_url_view_names():
     root_urlconf = __import__(settings.ROOT_URLCONF)
     urlpatterns = root_urlconf.urls.urlpatterns
     # These are all Django created views.
-    non_matches = ['index', 'login', 'logout', 'password_change', 'password_change_done', 'i18n_javascript', 'shortcut',
-                   'changelist_view', 'add_view', 'history_view', 'delete_view', 'change_view', 'RedirectView',
-                   'user_change_password', 'changelist_view', 'add_view', 'history_view', 'delete_view', 'change_view',
-                   'RedirectView', 'app_index', 'autocomplete_view']
+    non_matches = [
+        "index",
+        "login",
+        "logout",
+        "password_change",
+        "password_change_done",
+        "i18n_javascript",
+        "shortcut",
+        "changelist_view",
+        "add_view",
+        "history_view",
+        "delete_view",
+        "change_view",
+        "RedirectView",
+        "user_change_password",
+        "changelist_view",
+        "add_view",
+        "history_view",
+        "delete_view",
+        "change_view",
+        "RedirectView",
+        "app_index",
+        "autocomplete_view",
+    ]
 
     url_view_names = get_view_names(urlpatterns, non_matches)
     return url_view_names
@@ -107,7 +141,7 @@ def get_view_names(url_list, non_matches, view_names=None):
         view_names = []
     for entry in url_list:
         # If the entry is not a single pattern, recursively traverse the lists until we hit a single pattern.
-        if hasattr(entry, 'url_patterns'):
+        if hasattr(entry, "url_patterns"):
             get_view_names(entry.url_patterns, non_matches, view_names)
         # If a single pattern is not one of the non-matches, add it to our list of view names.
         elif entry.callback.__name__ not in non_matches:

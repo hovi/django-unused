@@ -1,150 +1,92 @@
-from __future__ import print_function
-
 import fileinput
 import time
+from dataclasses import dataclass
+from typing import List, Optional, Dict
 
-import six
+from colorama import init, Fore
 
-if six.PY2:
-    # No tempfile in PY2
-    from backports import tempfile
-    TemporaryDirectory = tempfile.TemporaryDirectory
-
-    time.perf_counter = time.clock
-else:
-    from tempfile import TemporaryDirectory
-
-from whoosh.analysis import RegexTokenizer
-from whoosh.fields import Schema, TEXT, ID
-from whoosh.index import create_in
-from whoosh.qparser import QueryParser
-from whoosh.util.text import rcompile
-
-from ...unused.find_templates import find_py_files, find_app_templates, find_global_templates
+from ...unused.find_templates import find_py_files, find_app_templates, find_global_templates, TemplateInfo
 
 
-def find_unused_templates():
+@dataclass
+class TemplateFilterOptions:
+    excluded_apps: Optional[List[str]] = None
+    excluded_template_dirs: Optional[List[str]] = None
+
+
+def find_unused_templates(filter_options: Optional[TemplateFilterOptions] = None) -> List[TemplateInfo]:
+    init(autoreset=True)
+
     start = time.perf_counter()
-    print('Finding all unused templates...')
-    print('  Getting global templates...')
-    global_templates_files, global_templates = find_global_templates()
-    print('   Done.\n  Getting app templates...')
-    app_templates_files, app_templates = find_app_templates()
-    print('   Done.')
+
+    print(f"{Fore.CYAN}Starting search for unused templates...\n")
+
+    print(f"{Fore.CYAN}Fetching global templates...")
+    global_templates = find_global_templates()
+    print(f"{Fore.GREEN}{len(global_templates)} global templates found.\n")
+
+    print(f"{Fore.CYAN}Fetching app templates...")
+    app_templates = find_app_templates()
+    initial_app_template_count = len(app_templates)
+
+    # Filter out templates from excluded apps
+    if filter_options and filter_options.excluded_apps:
+        excluded_apps_set = set(filter_options.excluded_apps)
+        app_templates = [t for t in app_templates if t.app_config and t.app_config.name not in excluded_apps_set]
+        filtered_app_template_count = initial_app_template_count - len(app_templates)
+        print(f"{Fore.YELLOW}{filtered_app_template_count} templates excluded by app filter.\n")
+
     templates = global_templates + app_templates
-    template_files = global_templates_files + app_templates_files
-    # templates.sort()
-    template_files.sort()
 
-    print('  Getting python files...')
-    py_files, pys = find_py_files()
-    print('   Done.')
-    all_files = py_files + template_files
+    initial_template_count = len(templates)
 
-    tl_count = [0 for t in templates]
+    # Filter out templates from excluded directories
+    if filter_options and filter_options.excluded_template_dirs:
+        excluded_dirs_set = set(filter_options.excluded_template_dirs)
+        templates = [t for t in templates if not any(t.template_path.startswith(d) for d in excluded_dirs_set)]
+        filtered_dir_template_count = initial_template_count - len(templates)
+        print(f"{Fore.YELLOW}{filtered_dir_template_count} templates excluded by directory filter.\n")
+
+    print(f"{Fore.GREEN}{len(app_templates)} app templates found after filtering.\n")
+
+    print(f"{Fore.CYAN}Fetching Python files...")
+    py_files, _ = find_py_files()
+    print(f"{Fore.GREEN}{len(py_files)} Python files found.\n")
+
+    all_files = py_files + [t.file_path for t in templates]
     unused_templates = []
 
-    print('  Creating Index', end='')
-    tmp_dir = TemporaryDirectory()
+    print(f"{Fore.CYAN}Searching for unused templates...", end="", flush=True)
+    for template in templates:
+        print(f"{Fore.CYAN}.", end="", flush=True)
+        template_found = False
+        with fileinput.input(all_files, openhook=fileinput.hook_encoded("utf-8")) as lines:
+            for line in lines:
+                if template.template_path in line or template.template_path.split('/')[-1] in line:
+                    template_found = True
+                    break
 
-    schema = Schema(title=TEXT(stored=True),
-                    path=ID(stored=True),
-                    content=TEXT(analyzer=RegexTokenizer(expression=rcompile(r"[\w/.]+"))))
-    ix = create_in(tmp_dir.name, schema)
-    writer = ix.writer()
-
-    for filename in all_files:
-        print('.', end='')  # , flush=True)
-        with open(filename, 'r') as f:
-            # print('WHOOSH', filename, filename, f)
-            # content = '/n'.join(f.readlines())
-            # if content:
-            #     print('HAS CONTENT')
-            #     print(content)
-            u_filename = filename
-            try:  # Python2
-                u_filename = unicode(filename)
-            except NameError:
-                pass
-            writer.add_document(title=u_filename, path=u_filename,
-                                content=six.u('/n'.join(f.readlines())))
-                                # content=content)
-    print('')  # , flush=True)
-    writer.commit()
-    print('   Done.')
-
-    print('  Searching through templates for references', end='')  # , flush=True)
-    with ix.searcher() as searcher:
-        for count, template in enumerate(templates):
-            print('.', end="")  # , flush=True)
-            query = QueryParser("content", ix.schema).parse(template)
-            results = searcher.search(query)
-            if len(results) < 1:
-                unused_templates.append(template)
-    print('')  # , flush=True)
-    print('   Done.')
-
-    if not unused_templates:
-        print('No unused templates found.')
-    else:
-        print('\nUnused templates:')
-        for template in unused_templates:
-            print(template)
-    end = time.perf_counter()
-    print('Finished in ' + str(end - start) + ' seconds.')
-    return unused_templates
-
-
-def find_unused_templates_whoosh():
-    """
-    Finds all templates in the project. The criteria for an unused view are:
-        1. It is not used other template.
-        2. It is not reference in any python file.
-    """
-    start = time.perf_counter()
-    print('Finding all unused templates...')
-    print('  Getting global templates...')
-    global_templates_files, global_templates = find_global_templates()
-    print('   Done.\n  Getting app templates...')
-    app_templates_files, app_templates = find_app_templates()
-    print('   Done.')
-    templates = global_templates + app_templates
-    template_files = global_templates_files + app_templates_files
-    # templates.sort()
-    template_files.sort()
-
-    print('  Getting python files...')
-    py_files, pys = find_py_files()
-    print('   Done.')
-    all_files = py_files + template_files
-
-    tl_count = [0 for t in templates]
-    unused_templates = []
-    print('  Searching through templates for references', end="")  # , flush=True)
-    for index, template in enumerate(templates):
-        print('.', end="")  # , flush=True)
-        for line in fileinput.input(all_files):  # Loops through every line of every file
-            # print([template, line])
-            if str.find(line, template) > -1:
-                # print(['FOUND', template, line])
-                tl_count[index] += 1
-                break
-        fileinput.close()
-
-        if tl_count[index] == 0:
+        if not template_found:
             unused_templates.append(template)
-            # print(template)
-            # else:
-            #     print(['FOUND', tl_count[index], template])
-    # print(os.linesep.join(unused_templates))
-    print('\nDone.')
+    fileinput.close()
 
-    if not unused_templates:
-        print('No unused templates found.')
-    else:
-        print('\nUnused templates:')
+    print(f"\n{Fore.GREEN}Search complete.\n")
+    if unused_templates:
+        print(f"{Fore.RED}Unused templates found:")
+        unused_templates_by_app: Dict[str, List[TemplateInfo]] = {}
         for template in unused_templates:
-            print(template)
+            app_name = template.app_config.name if template.app_config else "global"
+            if app_name not in unused_templates_by_app:
+                unused_templates_by_app[app_name] = []
+            unused_templates_by_app[app_name].append(template)
+
+        for app_name, templates in unused_templates_by_app.items():
+            print(f"\n{Fore.YELLOW}App: {app_name}")
+            for template in templates:
+                print(f"{Fore.RED}- {template.template_path}")
+    else:
+        print(f"{Fore.GREEN}No unused templates found.")
+
     end = time.perf_counter()
-    print('Finished in ' + str(end - start) + ' seconds.')
+    print(f"\n{Fore.CYAN}Finished in {end - start:.2f} seconds.")
     return unused_templates

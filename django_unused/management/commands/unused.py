@@ -1,31 +1,51 @@
-# from __future__ import absolute_import
+from argparse import ArgumentParser
+from typing import Any, List, Optional
+
 from django.core.management.base import BaseCommand
 
-from ._templates import find_unused_templates, find_unused_templates_whoosh
-from ._views import find_unused_views
+from ._templates import find_unused_templates, TemplateFilterOptions
 
 
 class Command(BaseCommand):
     help = 'Lists all unused template files.'
 
-    def add_arguments(self, parser):
-        # Unused_type is the parameter of the type of file you want to find.
-        parser.add_argument('unused_type', help='What to find: templates, views, media')
-        parser.add_argument('--dev', dest='dev_mode', action='store_true', default=False,
-                            help='Use development methods to find things')
+    def add_arguments(self, parser: ArgumentParser) -> None:
+        parser.add_argument(
+            'unused_type',
+            type=str,
+            nargs='?',
+            default='templates',
+            choices=['templates'],
+            help='What to find: templates (default), views, media'
+        )
+        parser.add_argument(
+            '--excluded-apps',
+            type=str,
+            nargs='*',
+            help='List of apps to exclude from the search'
+        )
+        parser.add_argument(
+            '--excluded-template-dirs',
+            type=str,
+            nargs='*',
+            help='List of template directories to exclude from the search'
+        )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: dict[str, Any]):
         unused_type = options['unused_type']
-        dev_mode = options.get('dev_mode', False)
-        if unused_type.lower() in ['templates', 'template']:
-            if dev_mode:
-                find_unused_templates_whoosh()
-            else:
-                find_unused_templates()
-        elif unused_type.lower() in ['views', 'view']:
-            find_unused_views()
-        elif unused_type.lower() == 'media':
-            print('media')
+        excluded_apps = options.get('excluded_apps')
+        excluded_template_dirs = options.get('excluded_template_dirs')
+
+        filter_options = TemplateFilterOptions(
+            excluded_apps=excluded_apps,
+            excluded_template_dirs=excluded_template_dirs
+        )
+
+        if unused_type == 'templates':
+            unused_templates = find_unused_templates(filter_options)
+            if unused_templates:
+                exit(1)
         else:
-            return unused_type + ' is not a valid parameter. Valid parameters are templates, views, and media.'
-            # self.stdout.ending = None  # work around because it's not a string
+            self.stderr.write(self.style.ERROR(
+                f'{unused_type} is not a valid parameter. Valid parameters are templates, views, and media.'))
+            exit(1)

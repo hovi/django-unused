@@ -14,6 +14,22 @@ class TemplateInfo:
     app_config: Optional[AppConfig]
 
 
+def find_templates_in_directory(dir_path: str, app_config: Optional[AppConfig] = None) -> List[TemplateInfo]:
+    templates: List[TemplateInfo] = []
+    for root, dirs, files in os.walk(dir_path):
+        for file in files:
+            file_path = os.path.join(root, file)
+            template_path = file_path.replace(dir_path, "").replace("\\", "/")[1:]
+            templates.append(
+                TemplateInfo(
+                    file_path=file_path,
+                    template_path=template_path,
+                    app_config=app_config,
+                )
+            )
+    return templates
+
+
 def find_app_templates() -> List[TemplateInfo]:
     templates: List[TemplateInfo] = []
 
@@ -21,19 +37,7 @@ def find_app_templates() -> List[TemplateInfo]:
         config: AppConfig = config
         if str(config.path).find(str(settings.BASE_DIR)) > -1:
             dir_path = os.path.join(str(config.path), "templates")
-            for root, dirs, files in os.walk(dir_path):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    template_path = file_path.replace(dir_path, "").replace("\\", "/")[
-                        1:
-                    ]
-                    templates.append(
-                        TemplateInfo(
-                            file_path=file_path,
-                            template_path=template_path,
-                            app_config=config,
-                        )
-                    )
+            templates.extend(find_templates_in_directory(dir_path, config))
 
     return templates
 
@@ -43,20 +47,8 @@ def find_global_templates() -> List[TemplateInfo]:
 
     if settings.TEMPLATES:
         for template_backend in settings.TEMPLATES:
-            for dir in template_backend.get("DIRS", []):
-                for root, dirs, files in os.walk(dir):
-                    for file in files:
-                        file_path = str(os.path.join(root, file))
-                        template_path = file_path.replace(dir, "").replace("\\", "/")[
-                            1:
-                        ]
-                        templates.append(
-                            TemplateInfo(
-                                file_path=file_path,
-                                template_path=template_path,
-                                app_config=None,
-                            )
-                        )
+            for directory in template_backend.get("DIRS", []):
+                templates.extend(find_templates_in_directory(directory))
 
     return templates
 

@@ -127,7 +127,7 @@ def search_unused_templates(templates: List[TemplateInfo]) -> TemplateSearchResu
                 )
                 if referencing_template:
                     reference_type = determine_reference_type(
-                        referencing_template, line
+                        line
                     )
                     reference = Reference(
                         template_info=referencing_template,
